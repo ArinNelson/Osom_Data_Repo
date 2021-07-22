@@ -29,10 +29,10 @@ function status = nc_gen_narr_data(file_name,ni,nj,nt,var_name)
     case 'winds'
       varid(end+1) = netcdf.defVar(ncid,'wind_time','double',dimid(3));
         netcdf.putAtt(ncid,varid(end),'units','days since beginning of this month');
-      varid(end+1) = netcdf.defVar(ncid,'Uair','double',[dimid(1) dimid(2) dimid(3)]);
+      varid(end+1) = netcdf.defVar(ncid,'Uwind','double',[dimid(1) dimid(2) dimid(3)]);
         netcdf.putAtt(ncid,varid(end),'long_name','10m eastward wind velocity');
         netcdf.putAtt(ncid,varid(end),'units','meters second-1');
-      varid(end+1) = netcdf.defVar(ncid,'Vair','double',[dimid(1) dimid(2) dimid(3)]);
+      varid(end+1) = netcdf.defVar(ncid,'Vwind','double',[dimid(1) dimid(2) dimid(3)]);
         netcdf.putAtt(ncid,varid(end),'long_name','10m northward wind velocity');
         netcdf.putAtt(ncid,varid(end),'units','meters second-1');
           
