@@ -13,41 +13,32 @@ Switch(1) = 1;      % Compute interpolation info things
 Switch(2) = 1;      % Generate the file & gather the data
 
 % Time Options
-date_start = [2010,01,01];	% Start year, month, day to gather data for
-date_end   = [2010,12,31];	% End   year, month, day to gather data for
-date_plus  = true;          % Have last entry be the first timestep of the day after date_end
+date_start = [2018,01,01];	% Start year, month, day to gather data for
+date_end   = [2020,12,31];	% End   year, month, day to gather data for
+date_plus  = false;          % Have last entry be the first timestep of the day after date_end
 
 % Interpolation options
-lon = -74.0 : 0.1 : -69.0;
-lat =  40.0 : 0.1 :  42.5;
+lon = -72.7 : 0.1 : -69.9;
+lat =  40.5 : 0.1 :  42.2;
 
 % Other options
 frc_fileopts = struct;                         % Options for save file
-frc_fileopts.FileName = 'OSOM_frc_swrad_2010_NAM.nc';                   % Save file name
-frc_fileopts.Title    = 'Wind forcing: NAM winds, spatially variable';	% Title attribute of frc file
-
-% do_doppio_fix = true;               % Reduce shortwave radiation by 23%
-% nam_grid      = 'nam_grid.nc';      % NAM grid file
-% data_dir      = '.\';               % Head directory of NAM data (gathered by gather_nam_anl.m)
-% lwrad_type    = 'downward';         % upward, downward, or net longwave radiation
-% swrad_type    = 'net';              % upward, downward, or net shortwave radiation
-% average_swrad = true;               % Compute daily averages of shortwave radiation
-% var_incl      = {'winds'};          % Variables to include in file
+%frc_fileopts.FileName = 'OSOM_frc_swrad_2010_NAM.nc';                   % Save file name
+%frc_fileopts.Title    = 'Wind forcing: NAM winds, spatially variable';	% Title attribute of frc file
+frc_fileopts.FileName = 'OSOM_frc_2018-20_NAM.nc';
 
 % Shortwave radiation options
 swrad_factor    = 1-0.23;             % Multiplicative factor (FROM DOPPIO)
-swrad_dailyavg  = true;               % Save swrad as a daily average
+swrad_dailyavg  = false;               % Save swrad as a daily average
 
-% Var info
-% Var Label , Source , options
-% var_to_get = {'winds','NAM',{}; ...
-% var_to_get = {'Tair','NAM','tair_time'; ...
-%               'Pair','NAM','pair_time'; ...
-%               'Qair','NAM','qair_time'; ...
-%               'Cfra','NAM','cloud_time'; ...
-%               'rain','NAM','rain_time'; ...
-%               'lwrad_down','NAM','lrf_time'; ...
-var_to_get = {'swrad','NAM','srf_time'; ...
+% Var info (Var Label , Source , options)
+ var_to_get = {'winds',     'NAM',{};           ...
+               'Tair',      'NAM','tair_time';  ...
+               'Pair',      'NAM','pair_time';  ...
+               'Qair',      'NAM','qair_time';  ...
+               'rain',      'NAM','rain_time';  ...
+               'lwrad_down','NAM','lrf_time';   ...
+               'swrad',     'NAM','srf_time';   ...
              };
          
 %-------------------------------------------------------------------------%
@@ -113,8 +104,8 @@ if(Switch(1)==1)
   %---INEFFICIENT, BUT NOT TOO SLOW, & BASED ON OLDER CODE---%
   
   % Time array for this file
-  tI = datenum(date_start(1),date_start(2),date_start(3),0,0,0);
-  tF = datenum(date_end(1),  date_end(2),  date_end(3),  0,0,0);
+  tI = datenum(date_start(1),date_start(2),date_start(3),0, 0, 0 );
+  tF = datenum(date_end(1),  date_end(2),  date_end(3),  23,59,59);
   if(date_plus==true); tF = tF+1; end
   t  = tI : 1 : tF;  
   
@@ -149,8 +140,8 @@ if(Switch(2)==1)
         input_filename = [src(iv).Dir 'winds/' src(iv).Source '_winds_' num2str(time_todo(it,1)) '_' sprintf('%0.2d',time_todo(it,2)) '.nc'];
         input_Uair = ncread(input_filename,'Uair');
         input_Vair = ncread(input_filename,'Vair');
-        input_time = ncread(input_filename,'wind_time') - datenum(date_start(1),date_start(2),date_start(3)) + datenum(time_todo(it,1),time_todo(it,2),1);
-        input_dt   = diff(input_time(1:2));
+        input_time = ncread(input_filename,'wind_time');
+        input_time = input_time - input_time(1) + datenum(time_todo(it,1),time_todo(it,2),1);
         nii        = numel(input_time);   % size(input_Uair,3)
           
         % Interpolate input to new grid
@@ -191,8 +182,8 @@ if(Switch(2)==1)
           input_filename = [src(iv).Dir var_to_get{iv,1} '/' src(iv).Source '_' var_to_get{iv,1} '_' num2str(time_todo(it,1)) '_' sprintf('%0.2d',time_todo(it,2)) '.nc'];
           input_data = ncread(input_filename,var_to_get{iv,1}); 
         end
-        input_time = ncread(input_filename,'wind_time') - datenum(date_start(1),date_start(2),date_start(3)) + datenum(time_todo(it,1),time_todo(it,2),1);
-        input_dt   = diff(input_time(1:2));
+        input_time = ncread(input_filename,'wind_time');
+        input_time = input_time - input_time(1) + datenum(time_todo(it,1),time_todo(it,2),1);
         nii        = numel(input_time);
           
         % Interpolate input to new grid (but only from water points!)

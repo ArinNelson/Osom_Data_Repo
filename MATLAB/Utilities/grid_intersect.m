@@ -1,4 +1,4 @@
-function [ndx_i, ndx_j, ndx_w] = grid_intersect(grid1, grid2)
+function [ndx_i, ndx_j, varargout] = grid_intersect(grid1, grid2)
 
     % Init structures
     ndx_i = cell(3,1);
@@ -41,6 +41,7 @@ function [ndx_i, ndx_j, ndx_w] = grid_intersect(grid1, grid2)
         clear i j;
         
         % Compute interpolation weights
+        if(nargout>2)
         for i=1:size(grid1(ig).lon,1)
         for j=1:size(grid1(ig).lon,2)
         if(grid1(ig).mask(i,j)==1)
@@ -57,27 +58,32 @@ function [ndx_i, ndx_j, ndx_w] = grid_intersect(grid1, grid2)
             end
             clear a b aa bb;
             
-            % If all surrounding points were land, find nearest water point
-            test = ndx_w{ig}(i,j,:,:);
-            if(all(test(:)==0))
-                kk      = find(grid2(ig).mask == 1);
-                [ii,jj] = find(grid2(ig).mask == 1); 
-                dd = zeros(numel(kk));
-                for k=1:numel(kk);  dd(k) = circledist( grid1(ig).lon(i,j), grid1(ig).lat(i,j), grid2(ig).lon(kk(k)), grid2(ig).lat(kk(k)) );   end
-                mm = find( dd==min(dd), 1, 'first' );
-                ndx_i{ig}(i,j,:)   = ones(2,1).*ii(mm);
-                ndx_j{ig}(i,j,:)   = ones(2,1).*jj(mm);
-                ndx_w{ig}(i,j,:,:) = ones(2,2);
-                clear kk ii jj dd mm;
-            end
-            clear test;
+%             % If all surrounding points were land, find nearest water point
+%             test = ndx_w{ig}(i,j,:,:);
+%             if(all(test(:)==0))
+%                 kk      = find(grid2(ig).mask == 1);
+%                 [ii,jj] = find(grid2(ig).mask == 1); 
+%                 dd = zeros(numel(kk));
+%                 for k=1:numel(kk);  dd(k) = circledist( grid1(ig).lon(i,j), grid1(ig).lat(i,j), grid2(ig).lon(kk(k)), grid2(ig).lat(kk(k)) );   end
+%                 mm = find( dd==min(dd), 1, 'first' );
+%                 ndx_i{ig}(i,j,:)   = ones(2,1).*ii(mm);
+%                 ndx_j{ig}(i,j,:)   = ones(2,1).*jj(mm);
+%                 ndx_w{ig}(i,j,:,:) = ones(2,2);
+%                 clear kk ii jj dd mm;
+%             end
+%             clear test;
           
         end
         end
         end
         clear i j;
+        end
 
     end
     clear ig;
       
+    if(nargout>2)
+      varargout = ndx_w;  
+    end
+    
 end
