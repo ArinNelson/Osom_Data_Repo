@@ -1,7 +1,7 @@
 function [var_name, var_value] = webread_usgs(str_url)
 
   % Read data from url (assumedly in rdb format)
-  txt_raw = webread(str_url,weboptions('Timeout', 120));
+  txt_raw = webread(str_url,weboptions('Timeout', 500));
   
   % Split at newline characters
   txt_lines = strsplit(txt_raw,'\n');

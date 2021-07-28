@@ -16,7 +16,7 @@ function status = gather_river_usgs(usgs_id,year_range,save_dir)
     % FOR DEBUGGING
     %usgs_id    = '01118500';
     %year_range = 2018:2020;
-    %save_dir   = 'D:/OSOM_Data_Repo/USGS/RiverGauges/';
+    %save_dir   = 'F:/OSOM_Data_Repo/USGS/RiverGauges/';
 
     % URL for station info 
     info_url = ['https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=' usgs_id];
@@ -68,17 +68,17 @@ function status = gather_river_usgs(usgs_id,year_range,save_dir)
         % Read in complete data record for this year at this station       
         [var_name, var_value] = webread_usgs(data_url);   
    
-        % Gather time
-        i_time   = find( strcmp( var_name, 'datetime'  )==1 );  
-        all_time = datenum(var_value(:,i_time))';
-        
-        % Remove time from full data array
-        var_name(   i_time) = [];
-        var_value(:,i_time) = [];
-        
-        % Save the variable names if they're not empty
+        % Continue if data is available
         if(~all(cellfun(@isempty,var_value)))
-       
+            
+            % Gather time
+            i_time   = find( strcmp( var_name, 'datetime'  )==1 );  
+            all_time = datenum(var_value(:,i_time))';
+        
+            % Remove time from full data array
+            var_name(   i_time) = [];
+            var_value(:,i_time) = [];
+
             % Init save dir
             this_dir = [save_dir num2str(year_range(iy)) '\'];
             if(exist(this_dir,'dir')~=7);  mkdir(this_dir);    end
