@@ -15,8 +15,8 @@
 clc; addpath('../Utilities');   % clear mex; % (useful when debugging nc_gen_* codes)
 
 % Options
-date_start = [2017,01];     % Start year, month to gather data for
-date_end   = [2019,01];     % End   year, month to gather data for (good to do +1 month for interpolation-in-time purposes)
+date_start = [2018,01];     % Start year, month to gather data for
+date_end   = [2021,01];     % End   year, month to gather data for (good to do +1 month for interpolation-in-time purposes)
 max_wait   = 120;           % Max time to wait (secs) for web response (uses Java & parallelism, set to 0 to disable)
 %data_dir   = '/gpfs/data/epscor/anelson5/OSOM_Data_Repo/NAM/';
 data_dir   = 'F:/OSOM_Data_Repo/NAM/';  % My desktop
@@ -43,11 +43,11 @@ var_info = {'Uwind',        'u-component_of_wind_height_above_ground',  4,  ''; 
             'Tair',         'Temperature_height_above_ground',          4,  '-273.15';  ...
             'Qair',         'Relative_humidity_height_above_ground',    4,  '';         ...
             'rain',         'Total_precipitation_surface_*',            3,  '*';        ...     % *'s indicate a special case
-            'lwrad_down',   'downward_long_wave_rad_flux_surface',      3,  '';         ...
-            'lwrad_up',     'upward_long_wave_rad_flux_surface',        3,  '';         ...
-            'swrad_down',   'downward_long_wave_rad_flux_surface',      3,  '';         ...
-            'swrad_up',     'upward_long_wave_rad_flux_surface',        3,  '';         ...
-            'Cfra',         'Total_cloud_cover_entire_atmosphere',      3,  '';         ...
+            'lwrad_down',   'Downward_Long-Wave_Radp_Flux_surface',      3,  '';         ...
+            'lwrad_up',     'Upward_Long-Wave_Radp_Flux_surface',        3,  '';         ...
+            'swrad_down',   'Downward_Short-Wave_Radiation_Flux_surface',      3,  '';         ...
+            'swrad_up',     'Upward_Short-Wave_Radiation_Flux_surface',        3,  '';         ...
+            'Cfra',         'Total_cloud_cover_entire_atmosphere_single_layer',      3,  '';         ...
             'sensible',     'Sensible_heat_net_flux_surface',           3,  '';         ...
             'latent',       'Latent_heat_net_flux_surface',             3,  '';         ...
            };
@@ -134,17 +134,11 @@ while( (year_on + (month_on-0.5)/12) < (date_end(1) + (date_end(2)-0.25)/12) )
         clc; disp(['Gathering NAM data for date ' datestr(datenum(year_on,month_on,day_on)) ' ' num2str(time_on) 'hrs...']);
         
             % Construct base URL string  
-            this_url = [this_url num2str(year_on) sprintf('%0.2d',month_on) '/'];
-            this_url = [this_url num2str(year_on) sprintf('%0.2d',month_on) sprintf('%0.2d',day_on) '/'];
-            this_url = [this_url 'namanl_218_' num2str(year_on) sprintf('%0.2d',month_on) sprintf('%0.2d',day_on) '_' sprintf('%0.2d',time_on) '00_00'];
-        
+            
             % File URLs
-            data_url1 = [this_url num2str(frcst_on)   '.grb'];
-            data_url2 = [this_url num2str(frcst_on+3) '.grb'];	% occasionally forecast is needed needed for 'rain' variable
-          
+            
             % Info from these files
-            info1 = ncinfo_web(max_wait,data_url1); info1_vars = {info1.Variables.Name};
-            info2 = ncinfo_web(max_wait,data_url2); info2_vars = {info2.Variables.Name};
+            
             
             % Loop through variables
             for iv=1:n_var
@@ -161,7 +155,20 @@ while( (year_on + (month_on-0.5)/12) < (date_end(1) + (date_end(2)-0.25)/12) )
                 
                 % Continue if data hasn't been gathered
                 if(check)
-                switch var_to_get{iv}
+                    
+                    % If not yet gathered, get info
+                    if(exist('info2','var')~=1)
+                    	this_url = [this_url num2str(year_on) sprintf('%0.2d',month_on) '/'];
+                        this_url = [this_url num2str(year_on) sprintf('%0.2d',month_on) sprintf('%0.2d',day_on) '/'];
+                        this_url = [this_url 'namanl_218_' num2str(year_on) sprintf('%0.2d',month_on) sprintf('%0.2d',day_on) '_' sprintf('%0.2d',time_on) '00_00'];
+                        data_url1 = [this_url num2str(frcst_on)   '.grb2' ];
+                        data_url2 = [this_url num2str(frcst_on+3) '.grb2' ];	% occasionally forecast is needed needed for 'rain' variable
+                        info1 = ncinfo_web(max_wait,data_url1); info1_vars = {info1.Variables.Name};
+                        info2 = ncinfo_web(max_wait,data_url2); info2_vars = {info2.Variables.Name};
+                    end
+                    
+                    % Continue
+                    switch var_to_get{iv}
                     
                     % Rain is a special case
                     case 'rain'
@@ -216,7 +223,7 @@ while( (year_on + (month_on-0.5)/12) < (date_end(1) + (date_end(2)-0.25)/12) )
                         end
 
                     
-                end
+                    end
                 end
                 
                 % Clean-up
@@ -227,7 +234,7 @@ while( (year_on + (month_on-0.5)/12) < (date_end(1) + (date_end(2)-0.25)/12) )
             clear iv;
           
             % Clean-up
-            clear this_url data_url data_url2
+            clear this_url data_url data_url2 info1 info2
         
         end
         

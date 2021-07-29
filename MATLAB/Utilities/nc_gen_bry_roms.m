@@ -182,7 +182,7 @@ function status = nc_gen_bry_roms(opts,nx,ny,nz,var_to_incl)
         case 'temp' 
             for i=1:4
             if( opts.WSEN(i)==1 )
-                varid(end+1) = netcdf.defVar(ncid,['temp_' str_wsen{i}],'NC_DOUBLE',[dimid(2+ndx_wsen(i)) dimid(7) dimid(end)]);
+                varid(end+1) = netcdf.defVar(ncid,['temp_' str_wsen{i}],'NC_DOUBLE',[dimid(1+ndx_wsen(i)) dimid(7) dimid(end)]);
                     netcdf.putAtt(ncid,varid(end),'long_name',['temperature, ' str_wsen{i} 'ern boundary condition']);
                     netcdf.putAtt(ncid,varid(end),'units','Celsuis');
                     netcdf.putAtt(ncid,varid(end),'coordinates',['lon_rho_', str_wsen{i} ', lat_rho_' str_wsen{i} ', s_rho, bry_time']);
@@ -194,7 +194,7 @@ function status = nc_gen_bry_roms(opts,nx,ny,nz,var_to_incl)
         case 'salt' 
             for i=1:4
             if( opts.WSEN(i)==1 )
-                varid(end+1) = netcdf.defVar(ncid,['salt_' str_wsen{i}],'NC_DOUBLE',[dimid(2+ndx_wsen(i)) dimid(7) dimid(end)]);
+                varid(end+1) = netcdf.defVar(ncid,['salt_' str_wsen{i}],'NC_DOUBLE',[dimid(1+ndx_wsen(i)) dimid(7) dimid(end)]);
                     netcdf.putAtt(ncid,varid(end),'long_name',['salinity, ' str_wsen{i} 'ern boundary condition']);
                     netcdf.putAtt(ncid,varid(end),'units','g/kg');
                     netcdf.putAtt(ncid,varid(end),'coordinates',['lon_rho_', str_wsen{i} ', lat_rho_' str_wsen{i} ', s_rho, bry_time']);

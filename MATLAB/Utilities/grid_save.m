@@ -3,7 +3,7 @@ function grid_save(file_name,grid)
     % Dimension sizes
     ni = size(grid.lon_rho,1);
     nj = size(grid.lon_rho,2);
-    ns = numel(grid.s_w);
+    ns = numel(grid.s_rho);
 
     % Unlimited dimension
     c_unlimited = netcdf.getConstant('NC_UNLIMITED');
