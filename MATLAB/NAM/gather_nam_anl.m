@@ -244,6 +244,13 @@ while( (year_on + (month_on-0.5)/12) < (date_end(1) + (date_end(2)-0.25)/12) )
 	end
 	clear it;
     
+    % Next year-month
+    month_on = month_on + 1;
+    if(month_on == 13)
+        year_on  = year_on + 1;
+        month_on = 1;
+    end
+    
     % Clean-up
     clear n_day t nt var_file;
 
