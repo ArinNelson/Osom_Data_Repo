@@ -65,7 +65,7 @@ function [ndx_i, ndx_j, ndx_w] = grid_intersect(grid1, grid2)
                 aa = ndx_i{ig}(i,j,a);
                 bb = ndx_j{ig}(i,j,b);
                 if(mask2(aa,bb)==1)
-                    ndx_w{ig}(i,j,a,b) = circledist( lon1(i,j), lat1(i,j), lon2(aa,bb), lat2(aa,bb) );
+                    ndx_w{ig}(i,j,a,b) = 1/circledist( lon1(i,j), lat1(i,j), lon2(aa,bb), lat2(aa,bb) );
                 end                              
             end
             end
@@ -82,7 +82,12 @@ function [ndx_i, ndx_j, ndx_w] = grid_intersect(grid1, grid2)
                 kk      = find(mask2 == 1);
                 [ii,jj] = find(mask2 == 1); 
                 dd = zeros(numel(kk));
-                for k=1:numel(kk);  dd(k) = circledist( lon1(i,j), lat1(i,j), lon2(kk(k)), lat2(kk(k)) );   end
+                for k=1:numel(kk)
+                    
+                    %dd(k) = circledist( lon1(i,j), lat1(i,j), lon2(kk(k)), lat2(kk(k)) );   
+                    dd(k) = (
+                
+                end
                 mm = find( dd==min(dd), 1, 'first' );
                 ndx_i{ig}(i,j,:)   = ones(2,1).*ii(mm);
                 ndx_j{ig}(i,j,:)   = ones(2,1).*jj(mm);

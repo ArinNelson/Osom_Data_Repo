@@ -11,23 +11,24 @@
 %=========================================================================%
 
 % Options
-max_wait        = 120;	% max time to wait (secs) for web response (uses Java & parallelism, set to <=0 to disable)
-grid_savedir    = 'F:/OSOM_Data_Repo/NAM/';     % location to save grid file
-grid_filename   = [data_dir 'nam_grid.nc'];     % grid file name
+max_wait        = 0;	% max time to wait (secs) for web response (uses Java & parallelism, set to 0 to disable)
+data_dir        = 'D:/OSOM_Data_Repo/NAM/';                         % Location where to save
+grid_filename   = 'nam_grid.nc';                % grid file name
 lon_lim         = [-74.0 -69.0];                % longitude domain
 lat_lim         = [ 40.0  42.5];                % latitude domain
 
 % Constants
+mask_url = 'https://www.ncei.noaa.gov/thredds/dodsC/model-namanl-old/201007/20100701/namanl_218_20100701_0000_000.grb';
 grid_url = 'https://rda.ucar.edu/datasets/ds609.0/docs/latlon-g218.txt';
 
 %-------------------------------------------------------------------------%
 
 % Full grid file directory
-grid_file = [grid_savedir grid_filename];
+grid_file = [data_dir grid_filename];
 
 % if the grid file already exists, ask user if they want to ovewrite it
 check = false;
-if(exist(grid_file,'file')==2
+if(exist(grid_file,'file')==2)
 	usr_input = input('A grid file with this name at this directory already exists.  Overwrite it? 1=yes, 0=no');
     if(usr_input==1)
         delete(grid_file);

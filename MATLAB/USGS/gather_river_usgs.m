@@ -8,6 +8,22 @@ function status = gather_river_usgs(usgs_id,year_range,save_dir)
 %   year_range: Array of integer year numbers (e.g., 2010:2020)
 %   save_dir:   Directory where downloaded data will be written
 % 
+% Note 08/05/2021
+%   This map shows more gauges, including inactive ones:
+%     https://streamstats.usgs.gov/ss/
+%   This site gives more gauge information: 
+%     https://streamstatsags.cr.usgs.gov/gagepages/html/<usgs_id>.htm
+%   This URL could be a good way to get shape info on gauged basin info:
+%     https://streamstats.usgs.gov/streamstatsservices/watershed{0}
+%     ?rcode=<state abbreviation, e.g. RI>
+%     &xlocation=<longitude, e.g. -72>
+%     &ylocation=<latitude, e.g. 41>
+%     &crs=4326
+%     &includeparameters=true
+%     &includeflowtypes=true
+%     &includefeatures=true
+%     &simplify=false
+% 
 % by Arin Nelson
 % on 07/20/2021
 % Last edited 07/27/2021

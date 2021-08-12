@@ -73,8 +73,6 @@ if(Switch(1)==1)
     src(i).dt     = src_info{ii,4};
     
     % Data from grid file  
-    src(i).x    = ncread(src_info{ii,3},'x'   );
-    src(i).y    = ncread(src_info{ii,3},'y'   );
     src(i).lon  = ncread(src_info{ii,3},'lon' );
     src(i).lat  = ncread(src_info{ii,3},'lat' );
     src(i).m    = ncread(src_info{ii,3},'mask');
@@ -85,19 +83,13 @@ if(Switch(1)==1)
       src(i).lon   = tmpX;    clear tmpX;
       src(i).lat   = tmpY;    clear tmpY;
     end
-  
-    % Source x/y 2D grid (if x & y are 1D)
-    if( any(size(src(i).x)==1) )
-      [tmpY, tmpX] = meshgrid(src(i).y,src(i).x);
-      src(i).x     = tmpX;    clear tmpX;
-      src(i).y     = tmpY;    clear tmpY;
-    end
-  
-    % Estimate x and y at interpolation points
-    ntrplnt_x = scatteredInterpolant(src(i).lon(:),cosd(src(i).lat(:)),src(i).x(:),'linear');
-    ntrplnt_y = scatteredInterpolant(src(i).lon(:),cosd(src(i).lat(:)),src(i).y(:),'linear');
-    src(i).xi = ntrplnt_x(lonm,cosd(latm));  clear ntrplnt_x;
-    src(i).yi = ntrplnt_y(lonm,cosd(latm));  clear ntrplnt_y;
+    
+    % lon/lat to x/y
+    [x, y ] = grn2eqa(latm,lonm);
+    [xx,yy] = grn2eqa(str(i).lat,src(i).lon);
+    src(i).x = xx;
+    src(i).y = yy;
+    clear xx yy;
   
   end
   clear i;
@@ -140,11 +132,11 @@ if(Switch(2)==1)
         % Load winds data for this year & month
         input_fileu = [src(iv).Dir 'Uwind/' src(iv).Source '_Uwind_' num2str(time_todo(it,1)) '_' sprintf('%0.2d',time_todo(it,2)) '.nc'];
         input_filev = [src(iv).Dir 'Vwind/' src(iv).Source '_Vwind_' num2str(time_todo(it,1)) '_' sprintf('%0.2d',time_todo(it,2)) '.nc'];
-        input_Uair = ncread(input_fileu,'Uwind');
-        input_Vair = ncread(input_filev,'Vwind');
-        input_time = ncread(input_fileu,'time');
-        input_time = input_time - input_time(1) + datenum(time_todo(it,1),time_todo(it,2),1);
-        nii        = numel(input_time);   % size(input_Uair,3)
+        input_Uair  = ncread(input_fileu,'Uwind');
+        input_Vair  = ncread(input_filev,'Vwind');
+        input_time  = ncread(input_fileu,'time');
+        input_time  = input_time - input_time(1) + datenum(time_todo(it,1),time_todo(it,2),1);
+        nii         = numel(input_time);   % size(input_Uair,3)
           
         % Interpolate input to new grid
         Uair = zeros(nx,ny,nii);
@@ -221,8 +213,8 @@ if(Switch(2)==1)
         % Load data for this year & month
         input_fileu = [src(iv).Dir var_to_get{iv,1} '_up/'   src(iv).Source '_' var_to_get{iv,1} '_up_'   num2str(time_todo(it,1)) '_' sprintf('%0.2d',time_todo(it,2)) '.nc'];
         input_filed = [src(iv).Dir var_to_get{iv,1} '_down/' src(iv).Source '_' var_to_get{iv,1} '_down_' num2str(time_todo(it,1)) '_' sprintf('%0.2d',time_todo(it,2)) '.nc'];
-        input_datau = ncread(input_fileu,var_to_get{iv,1}); 
-        input_datad = ncread(input_filed,var_to_get{iv,1}); 
+        input_datau = ncread(input_fileu,[var_to_get{iv,1} '_up']); 
+        input_datad = ncread(input_filed,[var_to_get{iv,1} '_down']); 
         input_data  = input_datad - input_datau;
         input_time  = ncread(input_fileu,'time');
         input_time  = input_time - input_time(1) + datenum(time_todo(it,1),time_todo(it,2),1);

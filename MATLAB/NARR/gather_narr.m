@@ -20,12 +20,13 @@ Switch(1) = 0;      % Initialize grid file and sampling info
 Switch(2) = 1;      % Perform data gathering
 
 % Options
-date_start = [2010,01];     % Start year, month to gather data for
-date_end   = [2011,01];     % End   year, month to gather data for
+date_start = [2018,01];     % Start year, month to gather data for
+date_end   = [2021,01];     % End   year, month to gather data for
 max_wait   = 120;           % Max time to wait (secs) for web response
-data_dir   = '/gpfs/data/epscor/anelson5/OSOM_Data_Repo/NARR/';
+%data_dir   = '/gpfs/data/epscor/anelson5/OSOM_Data_Repo/NARR/';
+data_dir   = 'F:/OSOM_Data_Repo/NARR/';
 grid_file  = [data_dir 'narr_grid.nc'];
-var_to_get = {'winds','Pair','Tair','Qair','Cfra','rain','lwrad','swrad'};
+var_to_get = {'winds','Pair','Tair','Qair','rain','lwrad','swrad'};
 
 %-------------------------------------------------------------------------%
 
@@ -40,8 +41,8 @@ n_var    = numel(var_to_get);
 
 % Variable info
 % List of variables available: https://psl.noaa.gov/data/gridded/data.narr.monolevel.html
-var_info = {'Uair',         'wind_time',    'uwnd.10m',             '';         ...	% units of m/s
-            'Vair',         'wind_time',    'vwnd.10m',             '';         ...	% units of m/s
+var_info = {'Uwind',        'wind_time',    'uwnd.10m',             '';         ...	% units of m/s
+            'Vwind',        'wind_time',    'vwnd.10m',             '';         ...	% units of m/s
             'Pair',         'pair_time',    'prmsl',                './100';    ...	% Convert Pa to mbar
             'Tair',         'tair_time',    'pottmp.sfc',           '-273.15';  ...	% Convert K to C
             'Qair',         'qair_time',    'rhum.2m',              '';         ...	% units of percent
@@ -157,8 +158,8 @@ if(Switch(2)==1)
          v_url  = [base_url 'vwnd.10m.' num2str(year_on) '.nc']; 
          narr_u = ncread(u_url,'uwnd',[narr_i0 narr_j0 i0_thismonth],[narr_ni narr_nj n_thismonth]); 
          narr_v = ncread(v_url,'vwnd',[narr_i0 narr_j0 i0_thismonth],[narr_ni narr_nj n_thismonth]); 
-         ncwrite(save_file{iv},'Uair',narr_u);
-         ncwrite(save_file{iv},'Vair',narr_v);
+         ncwrite(save_file{iv},'Uwind',narr_u);
+         ncwrite(save_file{iv},'Vwind',narr_v);
          ncwrite(save_file{iv},'wind_time',t);
          clear u_url v_url narr_u narr_v;
             
