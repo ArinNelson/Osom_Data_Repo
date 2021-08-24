@@ -2,7 +2,7 @@ function file_list = ls_tds(url_catalog)
 % Read list of files from THREDDS catalog at specified catalog.html
 
     % DEBUGGING
-    url_catalog = 'https://www.ncei.noaa.gov/thredds/catalog/model-namanl-old/201001/20100101/catalog.xml';
+    %url_catalog = 'https://www.ncei.noaa.gov/thredds/catalog/model-namanl-old/201001/20100101/catalog.xml';
 
     % Get xml structure from this url
     xml_catalog = xmlread_web(url_catalog);

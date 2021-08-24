@@ -1,4 +1,4 @@
-%function in = roms_read_infile(infile)
+function in = roms_read_infile(infile)
 %=========================================================================%
 % in = roms_read_infile(infile)
 % reads in the variable names and values from the roms.in file specified by
@@ -13,7 +13,7 @@
 %=========================================================================%
 
 % FOR DEBUGGING
-infile = 'D:\ROMS\Versions\DaveUllman\src\User\External\ocean.in';
+%infile = 'D:\ROMS\Versions\DaveUllman\src\User\External\ocean.in';
 
 % Open roms.in file
 fid = fopen(infile,'rt');
@@ -100,7 +100,4 @@ for i=1:numel(inline)
 end
 clear i;
 
-
-
-
-%end
+end

@@ -1,4 +1,5 @@
 function status = gather_river_usgs(usgs_id,year_range,save_dir)
+%=========================================================================%
 % status = gather_river_usgs(usgs_id, date_range, save_dir)
 % Gather river gauge data from specified USGS river gauge for the provided
 % year range and save it to the specified directory.
@@ -23,6 +24,8 @@ function status = gather_river_usgs(usgs_id,year_range,save_dir)
 %     &includeflowtypes=true
 %     &includefeatures=true
 %     &simplify=false
+% 
+% NOTE: HAVE OPTIONAL OUTPUT BE ANNUAL STATS FOR DEBUGGING/LOGGING PURPOSES
 % 
 % by Arin Nelson
 % on 07/20/2021
@@ -62,7 +65,6 @@ function status = gather_river_usgs(usgs_id,year_range,save_dir)
         latitude      = info_value{ strcmp(info_name,'dec_lat_va'   )==1 };    % Decimal latitude
         altitude      = info_value{ strcmp(info_name,'alt_va'       )==1 };    % Altitude in feet above NAV88
         drainage_area = inv_value{  strcmp(inv_name, 'drain_area_va')==1 };    % Drainage area in square miles
-        
         
         % Save data
         save(info_file,'station_name','longitude','latitude','altitude','drainage_area');
@@ -135,5 +137,8 @@ function status = gather_river_usgs(usgs_id,year_range,save_dir)
         
     end
     clear iy;
+    
+    % Success!
+    status = 1;
 
 end

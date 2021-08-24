@@ -1,345 +1,268 @@
 %=========================================================================%
-% process_nam_anl.m
+% process_nam_anl_v2.m
 % Process North American Mesoscale (NAM) model Analysis (ANL) data
 % by Arin Nelson
-% on 07/31/2021
+% on 07/18/2021
 % 
-% Good reference from ROMS variables:
-% https://code.usgs.gov/coawstmodel/COAWST/-/blob/84738f369c84b51109c8f9a323c0ddbe9c6f7587/Tools/mfiles/mtools/ncei_2roms.m
-% 
-% last edited by Arin Nelson on 07/31/2021
+% last edited by Arin Nelson on 08/14/2021
 %=========================================================================%
 clear; clc; addpath('../Utilities');   % clear mex;
 
 % Time Options
 date_start = [2018,01,01];	% Start year, month, day to gather data for
 date_end   = [2018,12,31];	% End   year, month, day to gather data for
-date_plus  = false;         % Have last entry be the first timestep of the day after date_end
 
 % Interpolation options
 lon = -72.7 : 0.1 : -69.9;
 lat =  40.5 : 0.1 :  42.2;
 
 % Other options
-nam_dir       = 'F:/OSOM_Data_Repo/NAM/';
-nam_grid      = 'F:/OSOM_Data_Repo/NAM/nam_grid.nc';
-var_to_get    = {'wind'};
-frcfile_name  = 'OSOM_frc_winds_2018_NAM.nc';
-frcfile_title = 'Surface forcing: NAM, spatially variable';
-incl_cast     = 1;  % Include forecasted variables
-
+save_file  = 'F:/OSOM_Data_Repo/ROMS/forcefiles/OSOM_frc_2018_NAM-ANL.nc';	% Save file name
+save_title = 'NAM forcing, spatially variable';                         % Title attribute of frc file
 
 % Shortwave radiation options
 swrad_factor    = 1-0.23;             % Multiplicative factor (FROM DOPPIO)
-swrad_dailyavg  = false;               % Save swrad as a daily average
+swrad_dailyavg  = true;               % Save swrad as a daily average
 
-% Var info (Var Label , Source , options)
-var_info = {'wind',      'wind_time';  ...
-            'Tair',      'tair_time';  ...
-            'Pair',      'pair_time';  ...
-            'Qair',      'qair_time';  ...
-            'rain',      'rain_time';  ...
-            'lwrad_down','lrf_time';   ...
-            'swrad',     'srf_time';   ...
-           };
-         
+% Variable options
+var_to_get = {'wind','wind_time', '';       ...
+              'Tair','tair_time', '';       ...
+              'Pair','pair_time', '';       ...
+              'Qair','qair_time', '';       ...
+              'rain','rain_time', '';       ...
+              'swrad','srf_time', 'net';    ...
+              'lwrad','lrf_time', 'down';   ...
+             };
+
+% Source options
+src_dir      = 'F:/OSOM_Data_Repo/NAM_ANL/';
+src_gridfile = 'F:/OSOM_Data_Repo/NAM_ANL/namanl_grid.nc';
+   
+%-------------------------------------------------------------------------%
+
+% Constants
+src_dt = 3/24;
+nx     = numel(lon);
+ny     = numel(lat);
+
 %=========================================================================%
-
-% Grid dimensions
-nx = numel(lon);
-ny = numel(lat);
 
 % Interpolation meshgrid
 [latm,lonm] = meshgrid(lat,lon);
-    
-% Relate variable names to var_info
-n_var = numel(var_to_get);
-i_var = zeros(n_var,1);
-for iv=1:n_var
-    i_var(iv) = find( strcmp(var_info(:,1),var_to_get{iv})==1 );
+
+% Data from grid file  
+src_x    = ncread(src_gridfile,'x'   );
+src_y    = ncread(src_gridfile,'y'   );
+src_lon  = ncread(src_gridfile,'lon' );
+src_lat  = ncread(src_gridfile,'lat' );
+src_mask = ncread(src_gridfile,'mask');
+
+% Source lon/lat meshgrid (if lon & lat are 1D)
+if( any(size(src_lon)==1) )
+	[tmpY, tmpX] = meshgrid(src_lat,src_lon);
+	src_lon = tmpX;     clear tmpX;
+	src_lat = tmpY;   	clear tmpY;
 end
-clear iv;
-
-% Generate interpolation info it not yet available
-if( exist('interp_info_NAM.mat','file')~=2 )
-
-	% Data from grid file  
-    nam_lon  = ncread(nam_grid,'lon' );
-    nam_lat  = ncread(nam_grid,'lat' );
-    nam_mask = ncread(nam_grid,'mask');
-    
-    % X-Y data
-    [    x,    y] = grn2eqa(latm,   lonm   );
-    [nam_x,nam_y] = grn2eqa(nam_lat,nam_lon);
-
-    % Inverse-distance-weighted interpolant
-    [ntrp_i, ntrp_j, ntrp_w] = grid_interpolant(nam_x,nam_y,x,y);
-    
-    % Save interp into
-    save('interp_info_NAM.mat','x','y','nam_x','nam_y','ntrp_i','ntrp_j','ntrp_w','nam_mask');
-          
-else
-    load('interp_info_NAM.mat');
+  
+% Source x/y 2D grid (if x & y are 1D)
+if( any(size(src_x)==1) )
+    [tmpY, tmpX] = meshgrid(src_y,src_x);
+	src_x = tmpX;      clear tmpX;
+	src_y = tmpY;      clear tmpY;
 end
+  
+% Estimate x and y at interpolation points
+ntrplnt_x = scatteredInterpolant(src_lon(:),src_lat(:),src_x(:),'linear');
+ntrplnt_y = scatteredInterpolant(src_lon(:),src_lat(:),src_y(:),'linear');
+xi        = ntrplnt_x(lonm,latm);   clear ntrplnt_x;
+yi        = ntrplnt_y(lonm,latm);   clear ntrplnt_y;
 
-% Input grid size
-nam_nx = size(nam_x,1);
-nam_ny = size(nam_y,2);
+% Time array
+src_t   = datenum(date_start) : src_dt : datenum(date_end)+1 - src_dt;
+nperday = round(1/src_dt);
 
-%  Indices of data to get
-i0_get = min(ntrp_i(:));     ni_get = max(ntrp_i(:))-i0_get+1;
-j0_get = min(ntrp_j(:));     nj_get = max(ntrp_j(:))-j0_get+1;
-
-% Parsed grid
-ii = i0_get : (i0_get+ni_get-1);
-jj = j0_get : (j0_get+nj_get-1);
-nam_x = nam_x(ii,jj);
-nam_y = nam_y(ii,jj);
-nam_m = nam_mask(ii,jj);
-iim   = find(nam_m==1);
+%-------------------------------------------------------------------------%
 
 % Generate forcing file if it doesn't yet exist
-if(exist(frcfile_name,'file')~=2)
-    
-    % Generate the file
-    nc_gen_frc_roms(frcfile_name,nx,ny,var_to_get,frcfile_title);
-
-    % Save grid variables
-	ncwrite(frcfile_name,'lon',lon);
-    ncwrite(frcfile_name,'lat',lat);
-    
+n_var = size(var_to_get,1);
+if(exist(save_file,'file')~=2)  
+    tmp = var_to_get(:,1);
+    for iv=1:n_var
+    if( strcmp(var_to_get{iv,3},'down')==1 )
+        tmp{iv} = [tmp{iv} '_down'];
+    end
+    end
+	nc_gen_frc_roms(save_file,nx,ny,tmp,save_title);
+	ncwrite(save_file,'lon',lon);
+	ncwrite(save_file,'lat',lat);
+    clear tmp;
 end
 
-%-------------------------------------------------------------------------%
+% Dtermine timestep
+t_test = ncread(save_file,var_to_get{end,2});
+if(isempty(t_test))
+    t_on  = datenum(date_start);
+    nt_on = 1;
+else
+    t_on  = datenum(date_start) + src_dt.*numel(t_test);
+    nt_on = numel(t_test)+1;
+end
 
-    % If interrupted, determine first time step for each variable
-    % TO DO
+% Loop through years, months, days
+imask = find(src_mask==1);
+while(t_on <= datenum(date_end))
+clc; disp(['On date ' datestr(t_on) '...']);
 
-	% Loop through timesteps
-	t_on = datenum(date_start);
-    it0  = ones(numel(var_to_get),1);
-	while(t_on <= datenum(date_end))
-    clc; disp(['On date ' datestr(t_on) '...']);
+	% Year, month, day
+	year_on  = num2str( year(t_on) );
+	month_on = sprintf( '%0.2d', month(t_on) );
+	day_on   = sprintf( '%0.2d', day(t_on) );
     
-        % Year, month, day
-        year_on  = num2str( year(t_on) );
-        month_on = sprintf( '%0.2d', month(t_on) );
-        day_on   = sprintf( '%0.2d', day(t_on) );
-
-        % Loop through wanted variables
-        for iv=1:n_var
+	% Loop through wanted variables
+	for iv=1:n_var
             
-            % Some things are unique to all data files
-            nam_file = [nam_dir '/' var_to_get{iv} '/' year_on '/' month_on '/' var_to_get{iv} '_' year_on '_' month_on '_' day_on '.nc'];
-            nam_time = ncread(nam_file,'time');
+        % Source data file
+        src_file = [src_dir '/' var_to_get{iv} '/' year_on '/' month_on '/' var_to_get{iv} '_' year_on '_' month_on '_' day_on '.nc'];
             
-            % Determine optimal time order (analysis > forecast)
-            avail_times = round(unique(nam_time));     avail_times(avail_times>=24) = [];
-            n_times     = numel(avail_times);
-            i_times     = cell(n_times,1);
-            for i=1:n_times
-                [ii,jj] = find( nam_time == avail_times(i) );
-                i_times{i} = [ii,jj];
-            end
-            clear i ii jj;
-                    
-            % Some other things are variable-dependent
-            switch var_to_get{iv}
+        % Load data
+        switch var_to_get{iv,1}
+            
+            case 'wind'
+                src_data = ncread(src_file,'Uwind') + sqrt(-1).* ncread(src_file,'Vwind');
+                
+            case {'lwrad','swrad'}
+                switch var_to_get{iv,3}
+                    case 'net';  src_data = ncread(src_file,[var_to_get{iv,1} '_down']) - ncread(src_file,[var_to_get{iv,1} '_up']);
+                    case 'down'; src_data = ncread(src_file,[var_to_get{iv,1} '_down']);
+                    case 'up';   src_data = ncread(src_file,[var_to_get{iv,1} '_up']);
+                end  
+                
+            otherwise
+                src_data = ncread(src_file,var_to_get{iv,1});
     
-                % . . . . . . . . . . . . . . . . . . . . . . . . . . . . %
-                case 'wind'
-
-                    % Get data
-                    nam_Uwind = ncread(nam_file,'Uwind',[i0_get, j0_get, 1, 1],[ni_get, nj_get, inf, inf]);
-                    nam_Vwind = ncread(nam_file,'Vwind',[i0_get, j0_get, 1, 1],[ni_get, nj_get, inf, inf]);
-                    
-                    % Init outputs
-                    out_Uwind = NaN(ni_get,nj_get,0);
-                    out_Vwind = NaN(ni_get,nj_get,0);
-                    out_Time  = [];
-                    
-                    % Loop through times
-                    for i=1:n_times
-                        
-                        % Time indices for this time
-                        tmp = i_times{i};
-                        
-                        % Sort in descending order based on columns
-                        [~,jj] = sort( tmp(:,1).*100 + tmp(:,2) );
-                        tmp = tmp(jj,:);
-                        clear jj;
-                        
-                        % Determine if its valid
-                        if(size(tmp,1)~=1)
-                            check = false;
-                            while(check==false && ~isempty(tmp))
-                                testU = nam_Uwind(:,:,tmp(1,1),tmp(1,2));
-                                testV = nam_Vwind(:,:,tmp(1,1),tmp(1,2));
-                                if( (all(isnan(testU(:))) && all(isnan(testV(:)))) || (all(abs(testU(:))>1e36) && all(abs(testV(:))>1e36)) )
-                                    tmp(1,:) = [];
-                                else
-                                    check = true;
-                                end
-                                clear testU testV;
-                            end
-                        end
-                        
-                        % Data at this time, if available
-                        if(~isempty(tmp))
-                        	out_Uwind(:,:,end+1) = nam_Uwind(:,:,tmp(1,1),tmp(1,2));
-                            out_Vwind(:,:,end+1) = nam_Vwind(:,:,tmp(1,1),tmp(1,2));
-                            out_Time(end+1)      = avail_times(i);
-                        end
-                        clear tmp;
-                        
-                    end
-                    clear i;
-                    
-                    % Interpolate to output grid
-                    ntrp_Uwind = NaN(nx,ny,numel(out_Time));
-                    ntrp_Vwind = NaN(nx,ny,numel(out_Time));
-                    for ix=1:nx
-                    for iy=1:ny
-                        wght = squeeze(ntrp_w(ix,iy,:,:));
-                        ii   = ntrp_i(ix,iy,:)-i0_get+1;    ii=ii(:);
-                        jj   = ntrp_j(ix,iy,:)-j0_get+1;    jj=jj(:);
-                        for i=1:numel(out_Time)
-                            tmpu = squeeze(out_Uwind(ii,jj,i));
-                            tmpv = squeeze(out_Vwind(ii,jj,i));
-                            ntrp_Uwind(ix,iy,i) = nansum( tmpu(:).*wght(:) ) ./ nansum( wght(~isnan(tmpu(:))) );
-                            ntrp_Vwind(ix,iy,i) = nansum( tmpv(:).*wght(:) ) ./ nansum( wght(~isnan(tmpu(:))) );
-                        end
-                        clear tmpu tmpv ii jj wgth;
-                    end
-                    end
-                    clear ix iy;
-                    
-%                     % TEST
-%                     ii = i0_get : (i0_get+ni_get-1);
-%                     jj = j0_get : (j0_get+nj_get-1);
-%                     xx = nam_x(ii,jj);  xLim = [min(xx(:)) max(xx(:))];
-%                     yy = nam_y(ii,jj);  yLim = [min(yy(:)) max(yy(:))];
-%                     cc = out_Uwind(:,:,1);  cc = [min(cc(:)) max(cc(:))];
-%                     subplot(1,2,1); surf(nam_x(ii,jj),nam_y(ii,jj),out_Uwind(:,:,1),'edgecolor','none');  colorbar; view(2);	xlim(xLim); ylim(yLim); caxis(cc);
-%                     subplot(1,2,2); surf(x,y,ntrp_Uwind(:,:,1),'edgecolor','none');  colorbar;  view(2); xlim(xLim); ylim(yLim); caxis(cc);
-%                     
-                    % Save data
-                    ncwrite(frcfile_name,'Uwind',    ntrp_Uwind,[1 1 it0(iv)]);
-                    ncwrite(frcfile_name,'Vwind',    ntrp_Vwind,[1 1 it0(iv)]);
-                    ncwrite(frcfile_name,'wind_time',out_Time,   it0(iv) );
-                    it0(iv) = it0(iv) + numel(out_Time);
-                    
-                    % Clean-up
-                    clear nam_Uwind nam_Vwind out_Uwind out_Vwind ntrp_Uwind ntrp_Vwind out_Time;
-                 
-                % . . . . . . . . . . . . . . . . . . . . . . . . . . . . %    
-                case {'lwrad','swrad'}
-                
-                    
-                    
-                % . . . . . . . . . . . . . . . . . . . . . . . . . . . . %    
-                case 'rain'
-                
-                    
-                    
-                % . . . . . . . . . . . . . . . . . . . . . . . . . . . . %    
-                case {'Tair','Pair','Qair','cloud'}
-                
-                    % Get data
-                    nam_data = ncread(nam_file,var_to_get{iv},[i0_get, j0_get, 1, 1],[ni_get, nj_get, inf, inf]);
-
-                    % Init outputs
-                    out_data = NaN(ni_get,nj_get,0);
-                    out_Time = [];
-                    
-                    % Loop through times
-                    for i=1:n_times
-                        
-                        % Time indices for this time
-                        tmp = i_times{i};
-                        
-                        % Sort in descending order based on columns
-                        [~,jj] = sort( tmp(:,1).*100 + tmp(:,2) );
-                        tmp = tmp(jj,:);
-                        clear jj;
-                        
-                        % Determine if its valid
-                        if(size(tmp,1)~=1)
-                            check = false;
-                            while(check==false && ~isempty(tmp))
-                                test = nam_data(:,:,tmp(1,1),tmp(1,2));
-                                if( (all(isnan(testU(:))) && all(isnan(testV(:)))) || (all(abs(testU(:))>1e36) && all(abs(testV(:))>1e36)) )
-                                    tmp(1,:) = [];
-                                else
-                                    check = true;
-                                end
-                                clear testU testV;
-                            end
-                        end
-                        
-                        % Data at this time, if available
-                        if(~isempty(tmp))
-                        	out_data(:,:,end+1) = nam_data(:,:,tmp(1,1),tmp(1,2));
-                            out_Time(end+1)     = avail_times(i);
-                        end
-                        clear tmp;
-                        
-                    end
-                    clear i;
-                    
-                    % Interpolate to output grid
-                    ntrp_data = NaN(nx,ny,numel(out_Time));
-                    for ix=1:nx
-                    for iy=1:ny  
-                        wght = squeeze(ntrp_w(ix,iy,:,:));
-                        ii   = ntrp_i(ix,iy,:)-i0_get+1;    ii=ii(:);
-                        jj   = ntrp_j(ix,iy,:)-j0_get+1;    jj=jj(:);
-                        wgth = wgth .* nam_m;     % SO INTERPOLATION IS ONLY DONE FROM WATER POINTS!
-                        for i=1:numel(out_Time)
-                            tmp = squeeze(out_data(ii,jj,i));
-                            ntrp_data(ix,iy,i) = nansum( tmpu(:).*wght(:) ) ./ nansum( wght(~isnan(tmpu(:))) );
-                        end
-                        clear tmpu tmpv ii jj wgth;
-                    end
-                    end
-                    clear ix iy;
-                    
-                    % Data missed is interpolated from nearest water grid
-                    % point
-                    for it=1:numel(out_Time)
-                       tmp = ntrp_data(:,:,it);
-                       dat = out_data(:,:,it);
-                       ntrplnt = scatteredInterpolant(nam_x(iim),nam_y(iim),dat(iim),'nearest');
-                       tmp(isnan(tmp)) = ntrplnt(x(iim),y(iim));
-                    end
-
-                    % Save data
-                    ncwrite(frcfile_name,var_to_get{iv},       ntrp_data,[1 1 it0(iv)]);
-                    ncwrite(frcfile_name,var_info{i_var(iv),2},out_Time,  it0(iv) );
-                    it0(iv) = it0(iv) + numel(out_Time);
-                    
-                    % Clean-up
-                    clear nam_data out_data ntrp_data out_Time;
-                    
-                    
-                % . . . . . . . . . . . . . . . . . . . . . . . . . . . . %    
-                otherwise
-                    error(['Unknown or unimplemented variable name: ' var_to_get{iv}]);
-            end
-            
-            % Clean-up
-            clear nam_file nam_time;
-            
         end
-        clear iv;
+        src_time  = ncread(src_file,'time');
         
-        % Onto next day
-        t_on = t_on + 1;
-      
-        % Clean-up
-        clear year_on month_on day_on;
-      
-	end
-    clear t_on;
+         % Depending on rain type, use a different correction factor
+         if(strcmp(var_to_get{iv,1},'rain'))
+             
+            src_time = src_time(:,2:end);
+            src_data = src_data(:,:,:,2:end);
+            src_data(isnan(src_data)) = 0;
+            src_type = squeeze(ncread(src_file,[var_to_get{iv,1} '_type'],[1 2 1],[inf inf inf]));
+            for it=1:size(src_data,3)
+            for ic=1:size(src_data,4)
+                this_src = squeeze(src_type(it,ic,:));
+                this_src(this_src>1e36) = [];
+                this_src = char(this_src);
+                    switch this_src'
+                        case 'Total precipitation (3_Hour Accumulation) @ Ground or water surface'
+                            src_data = src_data ./ (3*84600);   % 3-hr kg/m2 accumulation into kg/m2/s
+                        case 'Total precipitation (Mixed_intervals Accumulation) @ Ground or water surface'
+                            src_data = src_data ./ ( (src_time(it,ic)-src_time(it,ic-1))*84600);   % ?-hr kg/m2 accumulation into kg/m2/s
+                        otherwise
+                            pause(1);
+                    end
+                    clear this_src
+            end
+            end
+            clear it ic src_type;
+                
+         end
+
+        % Interpolate to output grid
+        data = NaN(nx,ny,nperday);
+        for id=1:nperday
+            [it,ic] = find( src_time == round(src_dt*24)*(id-1) );
+            if(numel(it)>1);    it=it(1);   ic=ic(1);   end
+            if(~isempty(it))
+                zz           = src_data(:,:,it,ic);  
+                if( strcmp(var_to_get{iv,1},'wind') )
+                    ntrplnt      = scatteredInterpolant(src_x(:),src_y(:),zz(:),'linear');
+                else
+                    ntrplnt      = scatteredInterpolant(src_x(imask),src_y(imask),zz(imask),'linear');
+                end
+                data(:,:,id) = ntrplnt(lonm,latm);
+                clear zz ntrplnt;
+            end
+        end
+        clear id it ic src_time;
+        
+        % Linearly interpolate data missing in time
+        for ix=1:size(data,1)
+        for iy=1:size(data,2)
+            data(ix,iy,:) = nanfill(squeeze(data(ix,iy,:)));
+        end
+        end
+        clear ix iy;
+        
+        % Some variables need a conversion factor
+        if(strcmp(var_to_get{iv,1},'Tair'));    data = data - 273.15;   end     % Kelvin to Celsius
+        if(strcmp(var_to_get{iv,1},'Pair'));    data = data ./ 100;     end     % Pa to mb
+        if(strcmp(var_to_get{iv,1},'swrad'))
+            if(~isempty(swrad_factor)); data = data.*swrad_factor;  end         % Apply DOPPIO correction factor
+            if(swrad_dailyavg == true); data = nanmean(data,3);     end         % Compute daily average if specified  
+        end
+        
+        % Quality check
+        if(any(isnan(data(:))))
+            pause(1);
+        end
+        
+        % Save data
+        switch var_to_get{iv,1}
             
-%-------------------------------------------------------------------------%
+            case 'wind'
+                ncwrite(save_file,'Uwind',real(data),[1 1 nt_on]);
+                ncwrite(save_file,'Vwind',imag(data),[1 1 nt_on]);
+                
+            case 'lwrad'
+                switch var_to_get{iv,3}
+                    case 'net';  src_data = ncread(src_file,'lwrad_down') - ncread(src_file,'lwrad_up');
+                    case 'down'; src_data = ncread(src_file,'lwrad_down');
+                    case 'up';   src_data = ncread(src_file,'lwrad_up'  );
+                end  
+                
+            case 'swrad'
+                if(swrad_dailyavg == true)
+                switch var_to_get{iv,3}
+                    case 'net';  ncwrite(save_file,'swrad',     data,[1 1 (nt_on-1)/(1/src_dt)+1]);
+                    case 'down'; ncwrite(save_file,'swrad_down',data,[1 1 (nt_on-1)/(1/src_dt)+1]);
+                    case 'up';   ncwrite(save_file,'swrad_up',  data,[1 1 (nt_on-1)/(1/src_dt)+1]);
+                end
+                else
+                switch var_to_get{iv,3}
+                    case 'net';  ncwrite(save_file,'swrad',     data,[1 1 nt_on]);
+                    case 'down'; ncwrite(save_file,'swrad_down',data,[1 1 nt_on]);
+                    case 'up';   ncwrite(save_file,'swrad_up',  data,[1 1 nt_on]);
+                end
+                end
+                
+            otherwise
+                ncwrite(save_file,var_to_get{iv,1},data,[1 1 nt_on]);
+    
+        end
+
+    end
+    clear iv;
+    
+    % When done with variables, save time
+    t_to_write = ((t_on) : src_dt : t_on+1-src_dt) - datenum(date_start);
+    for iv=1:n_var
+    if( swrad_dailyavg == true && strcmp(var_to_get{iv},'swrad')==1 )
+        ncwrite(save_file,var_to_get{iv,2},t_to_write(1),(nt_on-1)/(1/src_dt)+1);
+    else
+        ncwrite(save_file,var_to_get{iv,2},t_to_write,nt_on);
+    end
+    end
+    clear iv t_to_write;
+    
+    % Onto the next timestep
+    t_on  = t_on  + 1;
+    nt_on = nt_on + (1/src_dt);
+        
+    % Clean-up
+    clear year_on month_on day_on
+    
+end
+clear t_on 
