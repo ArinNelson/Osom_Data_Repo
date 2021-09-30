@@ -15,29 +15,31 @@
 %   - at some point radiations become capitalized, but u and v are still lower-case
 % first 'modern' file:  https://www.ncei.noaa.gov/thredds/dodsC/model-namanl/202005/20200518/nam_218_20200518_0000_000.grb2
 %   - similar to last 'old' file, includes forecasts for +1hr, +2hrs
-% last 'modern' file: ???
+% last 'modern' file: same
+% 
+% NOTE: This NAM product has max 3-hrly resolution, the 218 product has hrly resolution but doesn't begin until 2019/06/18.
 % 
 % Good reference from ROMS variables:
 % https://code.usgs.gov/coawstmodel/COAWST/-/blob/84738f369c84b51109c8f9a323c0ddbe9c6f7587/Tools/mfiles/mtools/ncei_2roms.m
 % 
-% last edited by Arin Nelson on 07/30/2021
+% last edited by Arin Nelson on 08/14/2021
 %=========================================================================%
 clear; clc; addpath('../Utilities');   % clear mex; % (useful when debugging nc_gen_* codes)
 
 % Options
-date_start = [2020,09,04];     % Start year, month, day to gather data for
-date_end   = [2020,12,31];     % End   year, month, day to gather data for
+date_start = [2021,07,12];     % Start year, month, day to gather data for
+date_end   = [2021,08,01];     % End   year, month, day to gather data for
 max_wait   = 600;              % Max time to wait (secs) for web response (uses Java & parallelism, set to 0 to disable)
-%data_dir   = '/gpfs/data/epscor/anelson5/OSOM_Data_Repo/NAM/';
-data_dir   = 'F:/OSOM_Data_Repo/NAM/';  % My desktop
-grid_file  = [data_dir 'nam_grid.nc'];  % Grid file
+%data_dir   = '/gpfs/data/epscor/anelson5/OSOM_Data_Repo/NAM_ANL/';
+data_dir   = 'F:/OSOM_Data_Repo/NAM_ANL/';  % My desktop
+grid_file  = [data_dir 'namanl_grid.nc'];  % Grid file
 var_to_get = {'lwrad','swrad','wind','Pair','Tair','Qair','rain','Cfra'};
 
 %-------------------------------------------------------------------------%
 
-% Constants (NOTE: Data before 2010 is not 3-hrly! There's also no data for 2020/05/16-17)
+% Constants
 date_min = [2004,03,02; 2020,05,18];
-date_max = [2020,05,15; 2020,12,31];
+date_max = [2020,05,15; 2021,09,01];
 base_url = 'https://www.ncei.noaa.gov/thredds/';
 data_url = {'model-namanl-old/', ...
             'model-namanl/', ...
@@ -138,172 +140,192 @@ clc; disp(['Gathering data for date ' datestr(t_on) ]);
                 catalog_url = [catalog_url year_on month_on '/' year_on month_on day_on '/catalog.xml'];
                 
                 % Read files available at this url
-                file_list = ls_tds(catalog_url);
-                file_list = file_list(end:-1:1,:);  % Files are given in reverse order.  Fix that.
-                n_files   = size(file_list,1);
+                try
+                  file_list = ls_tds(catalog_url);
+                  file_list = file_list(end:-1:1,:);  % Files are given in reverse order.  Fix that.
+                  n_files   = size(file_list,1);
+                catch err
+                end
+                if(exist('file_list','var')==1)
+                    
+                    % Gather available analysis times and forecast times
+                    file_info = cell(n_files,4);
+                    for i=1:n_files
+                        tmp = strsplit(file_list{i,2},{'_','.'});                                   % Split file name into pieces at _ and .
+                        file_info{i,1} = str2double(tmp{end-2}(1:2));                                                % Analysis time
+                        file_info{i,2} = str2double(tmp{end-1}(2:3));                                              % Forecast time
+                        file_info{i,3} = tmp{end};                                                  % File extension
+                    end
+                    clear i;
+
+                    % File info #4 is the file's info structure
+                    ii = [];
+                    for i=1:n_files
+                        this_url       = [base_url 'dodsC/' file_list{i,1}];
+                        try
+                        file_info{i,4} = ncinfo_web(max_wait,this_url);
+                        catch err; ii = [ii, i];
+                        end     
+                    end
+                    if(~isempty(ii));   file_list(ii,:) = []; file_info(ii,:) = []; n_files = size(file_info,1); end
+
+                    % Gather analysis times and forecast times based on each
+                    avail_main = unique([file_info{:,1}]);
+                    n_main     = numel(avail_main);
+                    avail_cast = cell(n_main,1);
+                    n_cast     = zeros(n_main,1);
+                    for i=1:n_main
+                        ii = find( [file_info{:,1}]==avail_main(i) );
+                        avail_cast{i} = [file_info{ii,2}];
+                        n_cast(i)     = numel(ii);
+                    end
+                    clear i ii;
+
+                    % The time variable will be 2D
+                    nt_main = n_main;
+                    nt_cast = max(n_cast);
                 
-                % Gather available analysis times and forecast times
-                file_info = cell(n_files,4);
+                end
+
+            end
+            if(exist('file_list','var')==1)
+                
+                % . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . %
+                % Depending on variable name, gather necessary data
+                disp([' On ' var_to_get{iv} '...']);
+
+                % Construct name(s) of variable(s) to read in
+                data_var_name = var_info{i_var(iv),3};
+
+                % Init data values
+                switch var_to_get{iv}
+                    case {'wind','lwrad','swrad'}
+                        data = NaN(nam_ni,nam_nj,nt_main,nt_cast,2);
+                    case 'rain'
+                        data = NaN(nam_ni,nam_nj,nt_main,nt_cast);
+                        rain_type = cell(nt_main,nt_cast); 
+                    otherwise
+                        data = NaN(nam_ni,nam_nj,nt_main,nt_cast);
+                end
+                time_value = NaN(nt_main,nt_cast);
+
+                % Loop through available files
                 for i=1:n_files
-                    tmp = strsplit(file_list{i,2},{'_','.'});                                   % Split file name into pieces at _ and .
-                    file_info{i,1} = str2double(tmp{end-2}(1:2));                                                % Analysis time
-                    file_info{i,2} = str2double(tmp{end-1}(2:3));                                              % Forecast time
-                    file_info{i,3} = tmp{end};                                                  % File extension
+
+                    % See if data is available in this file
+                    switch var_to_get{iv}
+                        case 'lwrad'
+                            try0 = {file_info{i,4}.Variables.Name};
+                            try1 = '_long_wave_rad_flux_surface';
+                            try2 = '_Long-Wave_Radp_Flux_surface'; 
+                            try3 = '_Long-Wave_Radiation_Flux_surface'; 
+                            ii   = find( contains(lower(try0),lower(try1))==1 | contains(lower(try0),lower(try2))==1 | contains(lower(try0),lower(try3))==1 );
+                        case 'swrad'
+                            try0 = {file_info{i,4}.Variables.Name};
+                            try1 = '_short_wave_rad_flux_surface';
+                            try2 = '_Short-Wave_Radp_Flux_surface'; 
+                            try3 = '_Short-Wave_Radiation_Flux_surface';
+                            ii   = find( contains(lower(try0),lower(try1))==1 | contains(lower(try0),lower(try2))==1 | contains(lower(try0),lower(try3))==1 );
+                        otherwise
+                            ii = find( contains( lower({file_info{i,4}.Variables.Name}), lower(data_var_name) )==1 );
+                    end
+
+                    % If data available, get it!
+                    if(~isempty(ii))
+
+                        % Construct data file URL
+                        this_url = [base_url 'dodsC/' file_list{i,1}];
+
+                        % Data time index
+                        imain = find( file_info{i,1} == avail_main );
+                        icast = find( file_info{i,2} == avail_cast{imain} );
+                        time_value(imain,icast) = avail_main(imain) + avail_cast{imain}(icast);
+
+                        % Read in data
+                        switch var_to_get{iv}
+                            case 'wind'
+                                jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'u-' )==1 );
+                                data(:,:,imain,icast,1) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1 1],[nam_ni nam_nj 1 1]);
+                                jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'v-' )==1 );
+                                data(:,:,imain,icast,2) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1 1],[nam_ni nam_nj 1 1]);
+                            case {'lwrad','swrad'}
+                                jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'downward' )==1 );
+                                data(:,:,imain,icast,1) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1],[nam_ni nam_nj 1]);
+                                jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'upward' )==1 );
+                                data(:,:,imain,icast,2) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1],[nam_ni nam_nj 1]);
+                            case 'rain'
+                                data(:,:,imain,icast)  = ncread(this_url,file_info{i,4}.Variables(ii).Name,[nam_i0 nam_j0 1],[nam_ni nam_nj 1]);
+                                rain_type{imain,icast} = file_info{i,4}.Variables(ii).Attributes(1).Value;
+                            case 'Tair'
+                                sstr = '';  for j=1:numel(ii);  sstr(end+1) = file_info{i,4}.Variables(ii(j)).Name(1); end
+                                jj = find(sstr=='T');
+                                ddim = ones(var_info{i_var(iv),4},1);   ddim(1) = nam_i0;   ddim(2) = nam_j0;
+                                ndim = ones(var_info{i_var(iv),4},1);   ndim(1) = nam_ni;   ndim(2) = nam_nj;
+                                data(:,:,imain,icast) = ncread(this_url,file_info{i,4}.Variables(ii(j)).Name,ddim,ndim);
+                            case 'Qair'
+                                sstr = '';  for j=1:numel(ii);  sstr(end+1) = file_info{i,4}.Variables(ii(j)).Name(1); end
+                                jj = find(sstr=='R');
+                                ddim = ones(var_info{i_var(iv),4},1);   ddim(1) = nam_i0;   ddim(2) = nam_j0;
+                                ndim = ones(var_info{i_var(iv),4},1);   ndim(1) = nam_ni;   ndim(2) = nam_nj;
+                                data(:,:,imain,icast) = ncread(this_url,file_info{i,4}.Variables(ii(j)).Name,ddim,ndim);
+                            otherwise
+                                ddim = ones(var_info{i_var(iv),4},1);   ddim(1) = nam_i0;   ddim(2) = nam_j0;
+                                ndim = ones(var_info{i_var(iv),4},1);   ndim(1) = nam_ni;   ndim(2) = nam_nj;
+                                data(:,:,imain,icast) = ncread(this_url,file_info{i,4}.Variables(ii).Name,ddim,ndim);
+                        end
+
+                    end
+                    clear ii;
+
+
                 end
                 clear i;
 
-                % File info #4 is the file's info structure
-                for i=1:n_files
-                    this_url       = [base_url 'dodsC/' file_list{i,1}];
-                    file_info{i,4} = ncinfo_web(max_wait,this_url);
-                end
-
-                % Gather analysis times and forecast times based on each
-                avail_main = unique([file_info{:,1}]);
-                n_main     = numel(avail_main);
-                avail_cast = cell(n_main,1);
-                n_cast     = zeros(n_main,1);
-                for i=1:n_main
-                    ii = find( [file_info{:,1}]==avail_main(i) );
-                    avail_cast{i} = [file_info{ii,2}];
-                    n_cast(i)     = numel(ii);
-                end
-                clear i ii;
-
-                % The time variable will be 2D
-                nt_main = n_main;
-                nt_cast = max(n_cast);
-
-            end
-            
-            % . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . %
-            % Depending on variable name, gather necessary data
-            disp([' On ' var_to_get{iv} '...']);
-            
-            % Construct name(s) of variable(s) to read in
-            data_var_name = var_info{i_var(iv),3};
-            
-            % Init data values
-            switch var_to_get{iv}
-                case {'wind','lwrad','swrad'}
-                    data = NaN(nam_ni,nam_nj,nt_main,nt_cast,2);
-                case 'rain'
-                    data = NaN(nam_ni,nam_nj,nt_main,nt_cast);
-                    rain_type = cell(nt_main,nt_cast); 
-                otherwise
-                    data = NaN(nam_ni,nam_nj,nt_main,nt_cast);
-            end
-            time_value = NaN(nt_main,nt_cast);
-
-            % Loop through available files
-            for i=1:n_files
-
-                % See if data is available in this file
+                % After data gathered, create the file and save the data
                 switch var_to_get{iv}
-                    case 'lwrad'
-                        try0 = {file_info{i,4}.Variables.Name};
-                        try1 = '_long_wave_rad_flux_surface';
-                        try2 = '_Long-Wave_Radp_Flux_surface'; 
-                        ii   = find( contains(lower(try0),lower(try1))==1 | contains(lower(try0),lower(try2))==1 );
-                    case 'swrad'
-                        try0 = {file_info{i,4}.Variables.Name};
-                        try1 = '_short_wave_rad_flux_surface';
-                        try2 = '_Short-Wave_Radp_Flux_surface'; 
-                        ii   = find( contains(lower(try0),lower(try1))==1 | contains(lower(try0),lower(try2))==1 );
-                    otherwise
-                        ii = find( contains( lower({file_info{i,4}.Variables.Name}), lower(data_var_name) )==1 );
+                    case 'wind'
+                        nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
+                        ncwrite(save_file,'Uwind',data(:,:,:,:,1));
+                        ncwrite(save_file,'Vwind',data(:,:,:,:,2));
+                    case 'lwrad'   
+                        nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
+                        ncwrite(save_file,'lwrad_down',data(:,:,:,:,1));
+                        ncwrite(save_file,'lwrad_up',  data(:,:,:,:,2));
+                    case 'swrad'   
+                        nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
+                        ncwrite(save_file,'swrad_down',data(:,:,:,:,1));
+                        ncwrite(save_file,'swrad_up',  data(:,:,:,:,2));
+                    case 'rain'
+                        nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
+                        ncwrite(save_file,'rain',data);
+                        for ii=1:nt_main
+                        for jj=1:nt_cast
+                        if(~isempty(rain_type{ii,jj}))
+                            tmp = zeros(1,1,length(rain_type{ii,jj}));
+                            tmp(1,1,:) = char(rain_type{ii,jj});
+                            ncwrite(save_file,'rain_type',tmp,[ii jj 1]);
+                        end
+                        end
+                        end
+                        clear rain_type ii jj tmp;
+                    otherwise      
+                        nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
+                        ncwrite(save_file,var_to_get{iv},data);
                 end
-                
 
-                % If data available, get it!
-                if(~isempty(ii))
-                
-                    % Construct data file URL
-                    this_url = [base_url 'dodsC/' file_list{i,1}];
-                    
-                    % Data time index
-                    imain = find( file_info{i,1} == avail_main );
-                    icast = find( file_info{i,2} == avail_cast{imain} );
-                    time_value(imain,icast) = avail_main(imain) + avail_cast{imain}(icast);
-                    
-                    % Read in data
-                    switch var_to_get{iv}
-                        case 'wind'
-                            jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'u-' )==1 );
-                            data(:,:,imain,icast,1) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1 1],[nam_ni nam_nj 1 1]);
-                            jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'v-' )==1 );
-                            data(:,:,imain,icast,2) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1 1],[nam_ni nam_nj 1 1]);
-                        case {'lwrad','swrad'}
-                            jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'downward' )==1 );
-                            data(:,:,imain,icast,1) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1],[nam_ni nam_nj 1]);
-                            jj = find( contains( lower({file_info{i,4}.Variables(ii).Name}), 'upward' )==1 );
-                            data(:,:,imain,icast,2) = ncread(this_url,file_info{i,4}.Variables(ii(jj)).Name,[nam_i0 nam_j0 1],[nam_ni nam_nj 1]);
-                        case 'rain'
-                            data(:,:,imain,icast)  = ncread(this_url,file_info{i,4}.Variables(ii).Name,[nam_i0 nam_j0 1],[nam_ni nam_nj 1]);
-                            rain_type{imain,icast} = file_info{i,4}.Variables(ii).Attributes(1).Value;
-                        case 'Tair'
-                            sstr = '';  for j=1:numel(ii);  sstr(end+1) = file_info{i,4}.Variables(ii(j)).Name(1); end
-                            jj = find(sstr=='T');
-                            ddim = ones(var_info{i_var(iv),4},1);   ddim(1) = nam_i0;   ddim(2) = nam_j0;
-                            ndim = ones(var_info{i_var(iv),4},1);   ndim(1) = nam_ni;   ndim(2) = nam_nj;
-                            data(:,:,imain,icast) = ncread(this_url,file_info{i,4}.Variables(ii(j)).Name,ddim,ndim);
-                        otherwise
-                            ddim = ones(var_info{i_var(iv),4},1);   ddim(1) = nam_i0;   ddim(2) = nam_j0;
-                            ndim = ones(var_info{i_var(iv),4},1);   ndim(1) = nam_ni;   ndim(2) = nam_nj;
-                            data(:,:,imain,icast) = ncread(this_url,file_info{i,4}.Variables(ii).Name,ddim,ndim);
-                    end
-                
-                end
-                clear ii;
+                % Save time variable
+                ncwrite(save_file,'time',time_value);
 
+                % Clean-up
+                clear tdata time_value;
 
             end
-            clear i;
-            
-            % After data gathered, create the file and save the data
-            switch var_to_get{iv}
-                case 'wind'
-                    nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
-                    ncwrite(save_file,'Uwind',data(:,:,:,:,1));
-                    ncwrite(save_file,'Vwind',data(:,:,:,:,2));
-                case 'lwrad'   
-                    nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
-                    ncwrite(save_file,'lwrad_down',data(:,:,:,:,1));
-                    ncwrite(save_file,'lwrad_up',  data(:,:,:,:,2));
-                case 'swrad'   
-                    nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
-                    ncwrite(save_file,'swrad_down',data(:,:,:,:,1));
-                    ncwrite(save_file,'swrad_up',  data(:,:,:,:,2));
-                case 'rain'
-                    nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
-                    ncwrite(save_file,'rain',data);
-                    for ii=1:nt_main
-                    for jj=1:nt_cast
-                    if(~isempty(rain_type{ii,jj}))
-                        tmp = zeros(1,1,length(rain_type{ii,jj}));
-                        tmp(1,1,:) = char(rain_type{ii,jj});
-                        ncwrite(save_file,'rain_type',tmp,[ii jj 1]);
-                    end
-                    end
-                    end
-                    clear rain_type ii jj tmp;
-                otherwise      
-                    nc_gen_nam_data(save_file,nam_ni,nam_nj,nt_main,nt_cast,var_to_get(iv));
-                    ncwrite(save_file,var_to_get{iv},data);
-            end
-            
-            % Save time variable
-            ncwrite(save_file,'time',time_value);
-
-            % Clean-up
-            clear tdata time_value;
-            
         end
         
         % Clean-up
         clear save_dir save_file data_var_name;
-
-    end   
+        
+    end
     clear iv;
     
     % Onto the next day

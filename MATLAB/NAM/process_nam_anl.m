@@ -10,7 +10,7 @@ clear; clc; addpath('../Utilities');   % clear mex;
 
 % Time Options
 date_start = [2018,01,01];	% Start year, month, day to gather data for
-date_end   = [2018,12,31];	% End   year, month, day to gather data for
+date_end   = [2019,01,01];	% End   year, month, day to gather data for
 
 % Interpolation options
 lon = -72.7 : 0.1 : -69.9;

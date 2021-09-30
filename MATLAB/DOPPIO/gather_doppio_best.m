@@ -9,8 +9,8 @@
 clc; clear mex; addpath('../Utilities');
 
 % Options
-date_start = [2017,12];     % Start year, month to gather data for
-date_end   = [2021,01];     % End   year, month to gather data for
+date_start = [2021,01];     % Start year, month to gather data for
+date_end   = [2021,08];     % End   year, month to gather data for
 max_wait   = 300;           % Max time to wait (secs) for web response
 %save_dir   = 'D:/OSOM_Data_Repo/DOPPIO/best/';
 save_dir   = 'F:/OSOM_Data_Repo/DOPPIO/best/';
